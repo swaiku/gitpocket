@@ -42,20 +42,20 @@ struct Overview {
     warning: Option<String>,
 }
 
-// Les tokens restent gérés par GitHub CLI : l'app n'en stocke aucun.
+// Tokens stay managed by GitHub CLI: the app stores none.
 fn gh<T: for<'a> Deserialize<'a>>(endpoint: &str, paginate: bool) -> Result<T, String> {
     let mut cmd = Command::new("gh");
     cmd.args(["api", "--hostname", "github.com", endpoint]);
     if paginate {
         cmd.args(["--paginate", "--slurp"]);
     }
-    let out = cmd.output().map_err(|_| "GitHub CLI (gh) est introuvable. Installe-le puis lance « gh auth login --hostname github.com ».".to_string())?;
+    let out = cmd.output().map_err(|_| "GitHub CLI (gh) not found. Install it, then run `gh auth login --hostname github.com`.".to_string())?;
     if !out.status.success() {
-        return Err("Impossible de charger GitHub. Vérifie ta connexion Internet et lance « gh auth login --hostname github.com ». Vérifie aussi les autorisations et le SSO de ton organisation.".into());
+        return Err("Could not load GitHub. Check your Internet connection and run `gh auth login --hostname github.com`. Also check your organization's permissions and SSO.".into());
     }
     let value: serde_json::Value = serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())?;
     let value = match (paginate, value) {
-        // --slurp renvoie un tableau de pages : on l'aplatit.
+        // --slurp returns an array of pages: flatten it.
         (true, serde_json::Value::Array(pages)) => serde_json::Value::Array(
             pages.into_iter().flat_map(|p| match p { serde_json::Value::Array(a) => a, o => vec![o] }).collect(),
         ),
@@ -79,7 +79,7 @@ async fn overview() -> Result<Overview, String> {
         let collab_ids: HashSet<u64> = collabs.iter().map(|r| r.id).collect();
         let (invitations, warning) = match gh::<Vec<Invitation>>("user/repository_invitations?per_page=100", true) {
             Ok(v) => (v, None),
-            Err(_) => (vec![], Some("Les invitations n’ont pas pu être chargées. Vérifie les permissions GitHub puis réessaie.".to_string())),
+            Err(_) => (vec![], Some("Invitations could not be loaded. Check your GitHub permissions and try again.".to_string())),
         };
         Ok(Overview {
             login: user.login,

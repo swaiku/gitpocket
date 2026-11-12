@@ -1,7 +1,7 @@
 [package]
 name = "gitpocket"
 version = "0.1.0"
-description = "Tes dépôts GitHub, au même endroit."
+description = "Your GitHub repositories, in one place."
 authors = []
 edition = "2024"
 

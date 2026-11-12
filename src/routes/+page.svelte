@@ -10,9 +10,9 @@
   import * as Select from '$lib/components/ui/select';
   import { filterRepos, trackAdditions, type Overview, type Seen, type View } from '$lib/filters';
 
-  const views: [View, string][] = [['collaborators', 'Collaborations'], ['shared', 'Partagés'], ['all', 'Tous'], ['invitations', 'Invitations']];
-  const sorts = { pushed: 'Dernier push', added: 'Derniers ajouts détectés', updated: 'Dernière mise à jour', name: 'Nom du dépôt' };
-  const visibilities = { '': 'Public et privé', private: 'Privé', public: 'Public' };
+  const views: [View, string][] = [['collaborators', 'Collaborations'], ['shared', 'Shared'], ['all', 'All'], ['invitations', 'Invitations']];
+  const sorts = { pushed: 'Last push', added: 'Recently detected', updated: 'Last update', name: 'Repository name' };
+  const visibilities = { '': 'Public and private', private: 'Private', public: 'Public' };
 
   let data = $state<Overview | null>(null);
   let seen = $state<Seen>({});
@@ -27,8 +27,8 @@
 
   const repos = $derived(data ? filterRepos(data, { view, query, owner, visibility, sort }, seen) : []);
   const owners = $derived(data ? [...new Set([...data.repos, ...data.invitations].map(r => r.full_name.split('/')[0]))].sort((a, b) => a.localeCompare(b)) : []);
-  const status = $derived([error, data?.warning, storageWarning, data && !repos.length ? 'Aucun dépôt à afficher avec ces filtres.' : ''].filter(Boolean).join(' '));
-  const date = (iso: string, opts: Intl.DateTimeFormatOptions) => new Date(iso).toLocaleString('fr-CH', opts);
+  const status = $derived([error, data?.warning, storageWarning, data && !repos.length ? 'No repositories match these filters.' : ''].filter(Boolean).join(' '));
+  const date = (iso: string, opts: Intl.DateTimeFormatOptions) => new Date(iso).toLocaleString(undefined, opts);
 
   async function load() {
     loading = true;
@@ -45,7 +45,7 @@
         localStorage.setItem(key, JSON.stringify(seen));
       } catch {
         seen = {};
-        storageWarning = 'Le suivi des nouveaux ajouts est indisponible : le stockage local n’est pas accessible.';
+        storageWarning = 'Tracking of new additions is unavailable: local storage is not accessible.';
       }
       if (!owners.includes(owner)) owner = '';
     } catch (e) {
@@ -63,12 +63,12 @@
   <header class="flex items-start justify-between">
     <div>
       <h1 class="text-2xl font-semibold">GitPocket ↗</h1>
-      <p class="text-muted-foreground">Tes dépôts GitHub, au même endroit.</p>
+      <p class="text-muted-foreground">Your GitHub repositories, in one place.</p>
     </div>
-    <Button onclick={load} disabled={loading}>{loading ? 'Chargement…' : 'Actualiser'}</Button>
+    <Button onclick={load} disabled={loading}>{loading ? 'Loading…' : 'Refresh'}</Button>
   </header>
 
-  <Input type="search" bind:value={query} placeholder="Rechercher un dépôt…" aria-label="Rechercher un dépôt" />
+  <Input type="search" bind:value={query} placeholder="Search repositories…" aria-label="Search repositories" />
 
   <Tabs.Root bind:value={view as string}>
     <Tabs.List>
@@ -78,20 +78,20 @@
 
   <div class="grid gap-3 sm:grid-cols-3">
     <Select.Root type="single" bind:value={owner}>
-      <Select.Trigger aria-label="Propriétaire">{owner || 'Tous les propriétaires'}</Select.Trigger>
+      <Select.Trigger aria-label="Owner">{owner || 'All owners'}</Select.Trigger>
       <Select.Content>
-        <Select.Item value="">Tous les propriétaires</Select.Item>
+        <Select.Item value="">All owners</Select.Item>
         {#each owners as o}<Select.Item value={o}>{o}</Select.Item>{/each}
       </Select.Content>
     </Select.Root>
     <Select.Root type="single" bind:value={visibility}>
-      <Select.Trigger aria-label="Visibilité">{visibilities[visibility as keyof typeof visibilities]}</Select.Trigger>
+      <Select.Trigger aria-label="Visibility">{visibilities[visibility as keyof typeof visibilities]}</Select.Trigger>
       <Select.Content>
         {#each Object.entries(visibilities) as [v, label]}<Select.Item value={v}>{label}</Select.Item>{/each}
       </Select.Content>
     </Select.Root>
     <Select.Root type="single" bind:value={sort}>
-      <Select.Trigger aria-label="Trier par">{sorts[sort as keyof typeof sorts]}</Select.Trigger>
+      <Select.Trigger aria-label="Sort by">{sorts[sort as keyof typeof sorts]}</Select.Trigger>
       <Select.Content>
         {#each Object.entries(sorts) as [v, label]}<Select.Item value={v}>{label}</Select.Item>{/each}
       </Select.Content>
@@ -99,33 +99,33 @@
   </div>
 
   <div class="text-muted-foreground flex justify-between text-sm">
-    <span>{repos.length} dépôt{repos.length === 1 ? '' : 's'}</span>
+    <span>{repos.length} {repos.length === 1 ? 'repository' : 'repositories'}</span>
     {#if data}<span>@{data.login}</span>{/if}
   </div>
   <p role="status" aria-live="polite" class="text-sm {error ? 'text-destructive' : 'text-muted-foreground'}">{status}</p>
 
-  <section class="grid gap-3" aria-label="Dépôts">
+  <section class="grid gap-3" aria-label="Repositories">
     {#each repos as repo (repo.id)}
       {@const url = repoUrl(repo.full_name)}
       {@const added = view === 'invitations' ? repo.invited_at : seen[repo.id]}
       <Card.Root>
         <Card.Header>
           <Card.Title><button class="hover:underline" onclick={() => openUrl(url)}>{repo.full_name}</button></Card.Title>
-          <Card.Description>{repo.description || 'Aucune description pour ce dépôt.'}</Card.Description>
-          <Card.Action><Badge variant="secondary">{repo.private ? 'Privé' : 'Public'}</Badge></Card.Action>
+          <Card.Description>{repo.description || 'No description.'}</Card.Description>
+          <Card.Action><Badge variant="secondary">{repo.private ? 'Private' : 'Public'}</Badge></Card.Action>
         </Card.Header>
         <Card.Content class="text-muted-foreground flex items-center justify-between text-sm">
           <span>
-            {[repo.language, repo.archived ? 'Archivé' : '',
-              added ? `${view === 'invitations' ? 'Invité' : 'Détecté'} le ${date(added, { dateStyle: 'short' })}` : '',
-              repo.pushed_at ? `Dernier push : ${date(repo.pushed_at, { dateStyle: 'short', timeStyle: 'short' })}` : ''].filter(Boolean).join(' · ')}
+            {[repo.language, repo.archived ? 'Archived' : '',
+              added ? `${view === 'invitations' ? 'Invited' : 'Detected'} on ${date(added, { dateStyle: 'short' })}` : '',
+              repo.pushed_at ? `Last push: ${date(repo.pushed_at, { dateStyle: 'short', timeStyle: 'short' })}` : ''].filter(Boolean).join(' · ')}
           </span>
           <Button variant="link" onclick={() => openUrl(`${url}/${view === 'invitations' ? 'invitations' : 'pulls'}`)}>
-            {view === 'invitations' ? 'Voir l’invitation ↗' : 'Pull requests ↗'}
+            {view === 'invitations' ? 'View invitation ↗' : 'Pull requests ↗'}
           </Button>
         </Card.Content>
       </Card.Root>
     {/each}
   </section>
-  <footer class="text-muted-foreground text-center text-xs">Lecture seule · Accès selon tes autorisations GitHub.</footer>
+  <footer class="text-muted-foreground text-center text-xs">Read-only · Access depends on your GitHub permissions.</footer>
 </main>
