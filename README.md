@@ -11,6 +11,8 @@
 
 <p align="center">
   <a href="https://github.com/swaiku/gitpocket"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/group/github/swaiku/gitpocket/stars+github/swaiku/gitpocket/license+github/swaiku/gitpocket/last-commit.svg?variant=branded&amp;size=xs" /><img alt="GitPocket stats" src="https://shieldcn.dev/group/github/swaiku/gitpocket/stars+github/swaiku/gitpocket/license+github/swaiku/gitpocket/last-commit.svg?variant=branded&amp;size=xs&amp;mode=light" /></picture></a>
+  <a href="https://github.com/swaiku/gitpocket/releases/latest"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/github/release/swaiku/gitpocket.svg?variant=branded&amp;size=xs" /><img alt="Latest release" src="https://shieldcn.dev/github/release/swaiku/gitpocket.svg?variant=branded&amp;size=xs&amp;mode=light" /></picture></a>
+  <a href="https://github.com/swaiku/gitpocket/actions/workflows/ci.yml"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/github/ci/swaiku/gitpocket.svg?variant=branded&amp;size=xs" /><img alt="CI" src="https://shieldcn.dev/github/ci/swaiku/gitpocket.svg?variant=branded&amp;size=xs&amp;mode=light" /></picture></a>
 </p>
 
 <p align="center">
