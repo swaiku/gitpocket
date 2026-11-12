@@ -10,6 +10,7 @@
   import * as Tabs from '$lib/components/ui/tabs';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
   import MultiSelect from '$lib/components/multi-select.svelte';
+  import { languageColor } from '$lib/languages';
   import * as Select from '$lib/components/ui/select';
   import { filterRepos, trackAdditions, type Overview, type Repo, type Seen, type View } from '$lib/filters';
 
@@ -261,7 +262,11 @@
           </button>
           </div>
           <div class="text-muted-foreground shrink-0 text-xs {layout === 'cards' ? 'flex gap-2' : 'hidden text-right sm:block'}">
-            <div>{repo.language ?? ''}</div>
+            {#if repo.language}
+              <Badge variant="outline" class="text-foreground">
+                <span class="size-2 rounded-full" style="background:{languageColor(repo.language)}"></span>{repo.language}
+              </Badge>
+            {/if}
             <div title={repo.pushed_at ?? ''}>
               {#if view === 'invitations' && added}Invited {ago(added)}
               {:else if repo.pushed_at}Pushed {ago(repo.pushed_at)}{/if}
