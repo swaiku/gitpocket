@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::io::{BufRead, BufReader};
+use std::sync::Mutex;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use tauri::{AppHandle, Manager};
+use tauri::{ipc::Channel, AppHandle, Manager, State};
 
 #[derive(Deserialize, Clone, Default)]
 struct Owner {
@@ -201,6 +203,16 @@ fn encode_path(path: &str) -> String {
     path.split('/').map(|seg| seg.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect::<String>()).collect::<Vec<_>>().join("/")
 }
 
+// Local actions only run inside a repository under the clone folder.
+fn repo_dir(app: &AppHandle, path: &str) -> Result<PathBuf, String> {
+    let root = clone_dir(app)?.canonicalize().map_err(|_| "The clone folder does not exist.".to_string())?;
+    let dir = Path::new(path).canonicalize().map_err(|_| "This folder no longer exists.".to_string())?;
+    if !dir.starts_with(&root) || !dir.join(".git").exists() {
+        return Err("This is not a repository in the clone folder.".into());
+    }
+    Ok(dir)
+}
+
 #[derive(Serialize)]
 struct FileContent {
     // "text" | "image" | "binary" | "large"
@@ -240,6 +252,62 @@ async fn repo_file(full_name: String, path: String, branch: Option<String>) -> R
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[derive(Serialize, Clone)]
+#[serde(tag = "event", content = "data", rename_all = "lowercase")]
+enum Output {
+    Line { stream: &'static str, text: String },
+    Done { code: Option<i32> },
+}
+
+#[derive(Default)]
+struct Running(Mutex<HashSet<u32>>);
+
+// Runs a shell command in a cloned repository and streams its output.
+// The UI asks for confirmation first; only repositories under the clone folder are accepted.
+#[tauri::command]
+fn run_command(app: AppHandle, state: State<Running>, path: String, command: String, on_event: Channel<Output>) -> Result<u32, String> {
+    if command.trim().is_empty() || command.len() > 20_000 {
+        return Err("Invalid command.".into());
+    }
+    let dir = repo_dir(&app, &path)?;
+    let mut cmd = if cfg!(windows) { let mut c = Command::new("cmd"); c.args(["/C", &command]); c } else { let mut c = Command::new("sh"); c.args(["-c", &command]); c };
+    cmd.current_dir(dir).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
+    let mut child = cmd.spawn().map_err(|e| format!("Could not start the command: {e}"))?;
+    let pid = child.id();
+    state.0.lock().unwrap().insert(pid);
+    let pump = |stream: &'static str, source: Box<dyn std::io::Read + Send>| {
+        let tx = on_event.clone();
+        std::thread::spawn(move || {
+            for line in BufReader::new(source).lines().map_while(Result::ok) {
+                let _ = tx.send(Output::Line { stream, text: line });
+            }
+        })
+    };
+    let readers = [pump("out", Box::new(child.stdout.take().unwrap())), pump("err", Box::new(child.stderr.take().unwrap()))];
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        for r in readers { let _ = r.join(); }
+        let code = child.wait().ok().and_then(|s| s.code());
+        handle.state::<Running>().0.lock().unwrap().remove(&pid);
+        let _ = on_event.send(Output::Done { code });
+    });
+    Ok(pid)
+}
+
+#[tauri::command]
+fn stop_command(state: State<Running>, id: u32) {
+    // Only processes started by run_command can be stopped.
+    if !state.0.lock().unwrap().contains(&id) { return }
+    let _ = if cfg!(windows) {
+        Command::new("taskkill").args(["/T", "/F", "/PID", &id.to_string()]).status()
+    } else {
+        // Negative pid targets the whole process group (the shell and its children).
+        Command::new("kill").args(["-TERM", "--", &format!("-{id}")]).status()
+    };
 }
 
 #[tauri::command]
@@ -352,9 +420,10 @@ async fn overview(app: AppHandle) -> Result<Overview, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(Running::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![overview, repo_file, repo_icon, set_clone_dir, clone_repo, tools, open_with])
+        .invoke_handler(tauri::generate_handler![overview, repo_file, run_command, stop_command, repo_icon, set_clone_dir, clone_repo, tools, open_with])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
