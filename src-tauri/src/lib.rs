@@ -213,6 +213,82 @@ fn repo_dir(app: &AppHandle, path: &str) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
+fn git(dir: &Path, args: &[&str]) -> Option<String> {
+    let out = Command::new("git").arg("-C").arg(dir).args(args).env("GIT_TERMINAL_PROMPT", "0").output().ok()?;
+    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim_end().to_string())
+}
+
+#[derive(Serialize)]
+struct Commit {
+    hash: String,
+    subject: String,
+    author: String,
+    date: String,
+}
+
+#[derive(Serialize, Default)]
+struct GitInfo {
+    branch: String,
+    upstream: Option<String>,
+    ahead: u32,
+    behind: u32,
+    changed: u32,
+    untracked: u32,
+    conflicted: u32,
+    last_commit: Option<Commit>,
+    remote: Option<String>,
+    branches: u32,
+    stashes: u32,
+}
+
+fn git_info(dir: &Path) -> Result<GitInfo, String> {
+    let status = git(dir, &["status", "--porcelain=v2", "--branch"]).ok_or("Could not read the git status of this repository.")?;
+    let mut info = GitInfo::default();
+    for line in status.lines() {
+        if let Some(v) = line.strip_prefix("# branch.head ") {
+            info.branch = v.to_string();
+        } else if let Some(v) = line.strip_prefix("# branch.upstream ") {
+            info.upstream = Some(v.to_string());
+        } else if let Some(v) = line.strip_prefix("# branch.ab ") {
+            let mut n = v.split_whitespace().map(|x| x.trim_start_matches(['+', '-']).parse::<u32>().unwrap_or(0));
+            info.ahead = n.next().unwrap_or(0);
+            info.behind = n.next().unwrap_or(0);
+        } else if line.starts_with("u ") {
+            info.conflicted += 1;
+        } else if line.starts_with("1 ") || line.starts_with("2 ") {
+            info.changed += 1;
+        } else if line.starts_with("? ") {
+            info.untracked += 1;
+        }
+    }
+    info.last_commit = git(dir, &["log", "-1", "--format=%h%x1f%s%x1f%an%x1f%cI"]).and_then(|l| {
+        let mut p = l.split('\x1f').map(String::from);
+        Some(Commit { hash: p.next()?, subject: p.next()?, author: p.next()?, date: p.next()? })
+    });
+    info.remote = git(dir, &["remote", "get-url", "origin"]);
+    info.branches = git(dir, &["for-each-ref", "refs/heads"]).map_or(0, |o| o.lines().count() as u32);
+    info.stashes = git(dir, &["stash", "list"]).map_or(0, |o| o.lines().count() as u32);
+    Ok(info)
+}
+
+#[tauri::command]
+async fn git_status(app: AppHandle, path: String) -> Result<GitInfo, String> {
+    let dir = repo_dir(&app, &path)?;
+    tauri::async_runtime::spawn_blocking(move || git_info(&dir)).await.map_err(|e| e.to_string())?
+}
+
+// Refreshes remote refs only (no merge), so "behind" counts become accurate.
+#[tauri::command]
+async fn git_fetch(app: AppHandle, path: String) -> Result<GitInfo, String> {
+    let dir = repo_dir(&app, &path)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        git(&dir, &["fetch", "--prune"]).ok_or("Fetch failed. Check your connection and GitHub access.")?;
+        git_info(&dir)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[derive(Serialize)]
 struct FileContent {
     // "text" | "image" | "binary" | "large"
@@ -423,7 +499,7 @@ pub fn run() {
         .manage(Running::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![overview, repo_file, run_command, stop_command, repo_icon, set_clone_dir, clone_repo, tools, open_with])
+        .invoke_handler(tauri::generate_handler![overview, git_status, git_fetch, repo_file, run_command, stop_command, repo_icon, set_clone_dir, clone_repo, tools, open_with])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
