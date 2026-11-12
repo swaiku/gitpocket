@@ -77,3 +77,21 @@
   * { @apply border-border outline-ring/50; }
   body { @apply bg-background text-foreground; }
 }
+
+/* highlight.js tokens, themed through the light/dark classes. */
+.hljs { white-space: pre; tab-size: 2; }
+.hljs-comment, .hljs-quote { color: oklch(0.55 0 0); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-built_in { color: oklch(0.55 0.2 20); }
+.hljs-string, .hljs-regexp, .hljs-addition { color: oklch(0.5 0.14 150); }
+.hljs-number, .hljs-attr, .hljs-attribute, .hljs-variable, .hljs-template-variable { color: oklch(0.5 0.18 260); }
+.hljs-title, .hljs-section, .hljs-name, .hljs-selector-id, .hljs-selector-class { color: oklch(0.5 0.2 300); }
+.hljs-type, .hljs-meta, .hljs-symbol, .hljs-bullet { color: oklch(0.55 0.15 70); }
+.hljs-deletion { color: oklch(0.55 0.22 25); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }
+.dark .hljs-comment, .dark .hljs-quote { color: oklch(0.7 0 0); }
+.dark .hljs-keyword, .dark .hljs-selector-tag, .dark .hljs-literal, .dark .hljs-built_in { color: oklch(0.75 0.15 20); }
+.dark .hljs-string, .dark .hljs-regexp, .dark .hljs-addition { color: oklch(0.78 0.14 150); }
+.dark .hljs-number, .dark .hljs-attr, .dark .hljs-attribute, .dark .hljs-variable, .dark .hljs-template-variable { color: oklch(0.78 0.12 250); }
+.dark .hljs-title, .dark .hljs-section, .dark .hljs-name, .dark .hljs-selector-id, .dark .hljs-selector-class { color: oklch(0.78 0.14 300); }
+.dark .hljs-type, .dark .hljs-meta, .dark .hljs-symbol, .dark .hljs-bullet { color: oklch(0.82 0.12 80); }

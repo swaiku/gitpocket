@@ -180,15 +180,74 @@ fn repo_icon(path: String) -> Option<String> {
     find_icon(Path::new(&path))
 }
 
+fn split_repo(full_name: &str) -> Result<(&str, &str), String> {
+    let valid = |part: &str| !part.is_empty() && part.chars().any(|c| c != '.') && part.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c));
+    match full_name.split_once('/') {
+        Some((owner, name)) if valid(owner) && valid(name) => Ok((owner, name)),
+        _ => Err("Invalid repository name.".into()),
+    }
+}
+
+// Builds the `?ref=` query for a branch name, rejecting anything that could alter the request.
+fn ref_query(branch: &Option<String>) -> Result<String, String> {
+    match branch.as_deref() {
+        None | Some("") => Ok(String::new()),
+        Some(b) if b.starts_with('-') || b.contains("..") || b.chars().any(|c| c.is_control() || c.is_whitespace() || "?#&~^:\\".contains(c)) => Err("Invalid branch name.".into()),
+        Some(b) => Ok(format!("?ref={}", encode_path(b))),
+    }
+}
+
+fn encode_path(path: &str) -> String {
+    path.split('/').map(|seg| seg.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect::<String>()).collect::<Vec<_>>().join("/")
+}
+
+#[derive(Serialize)]
+struct FileContent {
+    // "text" | "image" | "binary" | "large"
+    kind: &'static str,
+    text: Option<String>,
+    data_url: Option<String>,
+    size: u64,
+}
+
+#[tauri::command]
+async fn repo_file(full_name: String, path: String, branch: Option<String>) -> Result<FileContent, String> {
+    split_repo(&full_name)?;
+    let query = ref_query(&branch)?;
+    if path.is_empty() || path.split('/').any(|seg| seg == "..") {
+        return Err("Invalid path.".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        use base64::{Engine, engine::general_purpose::STANDARD};
+        #[derive(Deserialize)]
+        struct Raw { size: u64, #[serde(default)] content: String, #[serde(default)] encoding: String }
+        let raw: Raw = gh(&format!("repos/{full_name}/contents/{}{query}", encode_path(&path)), false)?;
+        // The contents API omits the body above 1 MB.
+        if raw.encoding != "base64" || (raw.content.is_empty() && raw.size > 0) {
+            return Ok(FileContent { kind: "large", text: None, data_url: None, size: raw.size });
+        }
+        let compact: String = raw.content.chars().filter(|c| !c.is_whitespace()).collect();
+        let bytes = STANDARD.decode(compact).map_err(|e| e.to_string())?;
+        let ext = path.rsplit('.').next().unwrap_or("").to_lowercase();
+        let image = match ext.as_str() { "png" => Some("image/png"), "jpg" | "jpeg" => Some("image/jpeg"), "gif" => Some("image/gif"), "webp" => Some("image/webp"), "svg" => Some("image/svg+xml"), "ico" => Some("image/x-icon"), _ => None };
+        if let Some(mime) = image {
+            return Ok(FileContent { kind: "image", text: None, data_url: Some(format!("data:{mime};base64,{}", STANDARD.encode(&bytes))), size: raw.size });
+        }
+        if bytes.contains(&0) {
+            return Ok(FileContent { kind: "binary", text: None, data_url: None, size: raw.size });
+        }
+        Ok(FileContent { kind: "text", text: Some(String::from_utf8_lossy(&bytes).into_owned()), data_url: None, size: raw.size })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 async fn clone_repo(app: AppHandle, full_name: String) -> Result<String, String> {
-    let valid = |part: &str| !part.is_empty() && part.chars().any(|c| c != '.') && part.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c));
-    let (owner, name) = full_name.split_once('/').ok_or("Invalid repository name.")?;
-    if !valid(owner) || !valid(name) {
-        return Err("Invalid repository name.".into());
-    }
+    let (_, name) = split_repo(&full_name)?;
+    let name = name.to_string();
     let dir = clone_dir(&app)?;
-    let dest = dir.join(name);
+    let dest = dir.join(&name);
     if dest.exists() {
         return Err(format!("A folder named “{name}” already exists in {}.", dir.display()));
     }
@@ -295,7 +354,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![overview, repo_icon, set_clone_dir, clone_repo, tools, open_with])
+        .invoke_handler(tauri::generate_handler![overview, repo_file, repo_icon, set_clone_dir, clone_repo, tools, open_with])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
