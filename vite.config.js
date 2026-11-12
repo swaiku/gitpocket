@@ -8,6 +8,9 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(() => ({
   plugins: [tailwindcss(), sveltekit()],
 
+  // Keep SVGs as files: inlining ~1000 file icons as data URIs would bloat the JS bundle.
+  build: { assetsInlineLimit: file => (file.endsWith('.svg') ? false : undefined) },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

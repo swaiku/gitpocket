@@ -3,6 +3,7 @@
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { ExternalLinkIcon } from '@lucide/svelte';
   import hljs from 'highlight.js/lib/common';
+  import FileIcon from '$lib/components/file-icon.svelte';
   import { Button } from '$lib/components/ui/button';
   import * as Sheet from '$lib/components/ui/sheet';
 
@@ -41,7 +42,7 @@
 <Sheet.Root open={path !== null} onOpenChange={open => { if (!open) path = null; }}>
   <Sheet.Content side="right" class="w-full data-[side=right]:sm:max-w-4xl">
     <Sheet.Header class="border-b pr-12">
-      <Sheet.Title class="truncate font-mono text-sm">{path}</Sheet.Title>
+      <Sheet.Title class="flex items-center gap-2 truncate font-mono text-sm">{#if path}<FileIcon name={path.split('/').pop()!} />{/if}{path}</Sheet.Title>
       <Sheet.Description class="flex items-center gap-2">
         <span>{branch}{file ? ` · ${file.size.toLocaleString()} bytes` : ''}</span>
         <Button variant="link" size="sm" class="h-auto p-0" onclick={() => openUrl(url)}>GitHub <ExternalLinkIcon /></Button>
