@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-label="GitPocket">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#f3f4f6"/></linearGradient>
+    <radialGradient id="glow" cx="0.82" cy="0.1" r="0.7"><stop offset="0" stop-color="#6366f1" stop-opacity="0.18"/><stop offset="1" stop-color="#6366f1" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1280" height="320" rx="20" fill="url(#bg)"/>
+  <rect width="1280" height="320" rx="20" fill="url(#glow)"/>
+  <rect x="0.5" y="0.5" width="1279" height="319" rx="19.5" fill="none" stroke="#e5e7eb"/>
+  <!-- pocket mark -->
+  <g transform="translate(120 96)">
+    <path d="M8 12h112a8 8 0 0 1 8 8v52c0 35-28 64-64 64S0 107 0 72V20a8 8 0 0 1 8-8z" fill="#111827"/>
+    <path d="M28 12v10a36 36 0 0 0 72 0V12" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-dasharray="1 0"/>
+    <circle cx="64" cy="70" r="9" fill="#ffffff"/>
+    <path d="M64 79v22M64 88l16 12" stroke="#ffffff" stroke-width="7" stroke-linecap="round" fill="none"/>
+    <circle cx="82" cy="102" r="7" fill="#ffffff"/>
+  </g>
+  <text x="290" y="160" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="78" font-weight="800" fill="#111827" letter-spacing="-2">GitPocket</text>
+  <text x="293" y="210" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="28" fill="#4b5563">Every GitHub repo you own, share or were invited to. In one place.</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18" fill="#374151">
+    <rect x="293" y="238" width="90" height="34" rx="17" fill="#e5e7eb"/><text x="338" y="261" text-anchor="middle">Tauri</text>
+    <rect x="395" y="238" width="104" height="34" rx="17" fill="#e5e7eb"/><text x="447" y="261" text-anchor="middle">Svelte</text>
+    <rect x="511" y="238" width="80" height="34" rx="17" fill="#e5e7eb"/><text x="551" y="261" text-anchor="middle">Rust</text>
+    <rect x="603" y="238" width="144" height="34" rx="17" fill="#e5e7eb"/><text x="675" y="261" text-anchor="middle">TypeScript</text>
+  </g>
+</svg>
