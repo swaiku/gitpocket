@@ -5,7 +5,7 @@ type Output = { event: 'line'; data: { stream: 'out' | 'err'; text: string } } |
 // One command at a time, streamed from the Rust side.
 export const runner = $state({
   open: false, command: '', cwd: '', lines: [] as { stream: string; text: string }[],
-  running: false, id: null as number | null, code: null as number | null, error: '',
+  height: 224, running: false, id: null as number | null, code: null as number | null, error: '',
 });
 
 const ansi = /\x1b\[[0-9;?]*[A-Za-z]/g;
