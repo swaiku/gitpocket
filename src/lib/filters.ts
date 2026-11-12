@@ -1,6 +1,6 @@
 export type Repo = {
   id: number; full_name: string; description?: string | null; private: boolean; language?: string | null;
-  updated_at?: string | null; pushed_at?: string | null; archived?: boolean; collaborator?: boolean; invited_at?: string | null;
+  updated_at?: string | null; pushed_at?: string | null; archived?: boolean; collaborator?: boolean; invited_at?: string | null; open_prs?: number | null;
 };
 export type Overview = { login: string; repos: Repo[]; invitations: Repo[]; warning?: string | null };
 export type View = 'all' | 'collaborators' | 'shared' | 'invitations';

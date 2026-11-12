@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::process::Command;
 
 #[derive(Deserialize, Clone)]
@@ -26,6 +26,7 @@ struct Repo {
     archived: bool,
     collaborator: bool,
     invited_at: Option<String>,
+    open_prs: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -43,9 +44,9 @@ struct Overview {
 }
 
 // Tokens stay managed by GitHub CLI: the app stores none.
-fn gh<T: for<'a> Deserialize<'a>>(endpoint: &str, paginate: bool) -> Result<T, String> {
+fn gh_json(args: &[&str], paginate: bool) -> Result<serde_json::Value, String> {
     let mut cmd = Command::new("gh");
-    cmd.args(["api", "--hostname", "github.com", endpoint]);
+    cmd.args(["api", "--hostname", "github.com"]).args(args);
     if paginate {
         cmd.args(["--paginate", "--slurp"]);
     }
@@ -54,18 +55,29 @@ fn gh<T: for<'a> Deserialize<'a>>(endpoint: &str, paginate: bool) -> Result<T, S
         return Err("Could not load GitHub. Check your Internet connection and run `gh auth login --hostname github.com`. Also check your organization's permissions and SSO.".into());
     }
     let value: serde_json::Value = serde_json::from_slice(&out.stdout).map_err(|e| e.to_string())?;
-    let value = match (paginate, value) {
+    Ok(match (paginate, value) {
         // --slurp returns an array of pages: flatten it.
         (true, serde_json::Value::Array(pages)) => serde_json::Value::Array(
             pages.into_iter().flat_map(|p| match p { serde_json::Value::Array(a) => a, o => vec![o] }).collect(),
         ),
         (_, v) => v,
-    };
-    serde_json::from_value(value).map_err(|e| e.to_string())
+    })
 }
 
-fn repo(r: Raw, collaborator: bool, invited_at: Option<String>) -> Repo {
-    Repo { id: r.id, full_name: r.full_name, description: r.description, private: r.private, language: r.language, updated_at: r.updated_at, pushed_at: r.pushed_at, archived: r.archived, collaborator, invited_at }
+fn gh<T: for<'a> Deserialize<'a>>(endpoint: &str, paginate: bool) -> Result<T, String> {
+    serde_json::from_value(gh_json(&[endpoint], paginate)?).map_err(|e| e.to_string())
+}
+
+// Open pull request counts are only available through GraphQL.
+fn open_prs() -> Result<HashMap<String, u64>, String> {
+    let query = "query($endCursor: String) { viewer { repositories(first: 100, after: $endCursor, affiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER]) { pageInfo { hasNextPage endCursor } nodes { nameWithOwner pullRequests(states: OPEN) { totalCount } } } } }";
+    let pages = gh_json(&["graphql", "-f", &format!("query={query}")], true)?;
+    let nodes = pages.as_array().into_iter().flatten().filter_map(|p| p["data"]["viewer"]["repositories"]["nodes"].as_array()).flatten();
+    Ok(nodes.filter_map(|n| Some((n["nameWithOwner"].as_str()?.to_lowercase(), n["pullRequests"]["totalCount"].as_u64()?))).collect())
+}
+
+fn repo(r: Raw, collaborator: bool, invited_at: Option<String>, open_prs: Option<u64>) -> Repo {
+    Repo { id: r.id, full_name: r.full_name, description: r.description, private: r.private, language: r.language, updated_at: r.updated_at, pushed_at: r.pushed_at, archived: r.archived, collaborator, invited_at, open_prs }
 }
 
 #[tauri::command]
@@ -77,14 +89,16 @@ async fn overview() -> Result<Overview, String> {
         let repos: Vec<Raw> = gh("user/repos?affiliation=owner,collaborator,organization_member&sort=updated&per_page=100", true)?;
         let collabs: Vec<Raw> = gh("user/repos?affiliation=collaborator&per_page=100", true)?;
         let collab_ids: HashSet<u64> = collabs.iter().map(|r| r.id).collect();
+        // Counts are optional: on failure the UI simply shows no number.
+        let prs = open_prs().unwrap_or_default();
         let (invitations, warning) = match gh::<Vec<Invitation>>("user/repository_invitations?per_page=100", true) {
             Ok(v) => (v, None),
             Err(_) => (vec![], Some("Invitations could not be loaded. Check your GitHub permissions and try again.".to_string())),
         };
         Ok(Overview {
             login: user.login,
-            repos: repos.into_iter().map(|r| { let c = collab_ids.contains(&r.id); repo(r, c, None) }).collect(),
-            invitations: invitations.into_iter().map(|i| repo(i.repository, false, Some(i.created_at))).collect(),
+            repos: repos.into_iter().map(|r| { let c = collab_ids.contains(&r.id); let n = prs.get(&r.full_name.to_lowercase()).copied(); repo(r, c, None, n) }).collect(),
+            invitations: invitations.into_iter().map(|i| repo(i.repository, false, Some(i.created_at), None)).collect(),
             warning,
         })
     })
