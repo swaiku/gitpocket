@@ -23,6 +23,8 @@
   // highlight.js escapes the source, so its output is safe to inject.
   const html = $derived(file?.text != null && lang ? hljs.highlight(file.text, { language: lang }).value : null);
 
+  const lineNumbers = $derived(file?.text != null ? Array.from({ length: file.text.replace(/\n$/, '').split('\n').length }, (_, i) => i + 1).join('\n') : '');
+
   $effect(() => {
     const current = path;
     file = null;
@@ -58,7 +60,11 @@
         <p class="text-muted-foreground py-8 text-center text-sm">This file is too large to preview here (over 1 MB).</p>
       {:else if file}
         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-        <pre class="hljs font-mono text-xs leading-5"><code>{#if html}{@html html}{:else}{file.text}{/if}</code></pre>
+        <div class="flex font-mono text-xs leading-5">
+          <!-- Line numbers: lines never wrap (white-space: pre), so the two columns stay aligned. -->
+          <pre aria-hidden="true" class="bg-popover text-muted-foreground sticky left-0 pr-4 text-right select-none">{lineNumbers}</pre>
+          <pre class="hljs"><code>{#if html}{@html html}{:else}{file.text}{/if}</code></pre>
+        </div>
       {/if}
     </div>
   </Sheet.Content>
