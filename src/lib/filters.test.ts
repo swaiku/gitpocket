@@ -7,7 +7,7 @@ const repos = [
   { id: 2, full_name: 'org/team', collaborator: false, private: true, updated_at: '2026-02-01' },
   { id: 3, full_name: 'me/own', collaborator: false, private: false, updated_at: '2026-03-01' },
 ];
-const data = { login: 'me', repos, invitations: [{ ...repos[0], invited_at: '2026-05-01' }, { ...repos[1], invited_at: '2026-06-01' }] };
+const data = { login: 'me', clone_dir: '', repos, invitations: [{ ...repos[0], invited_at: '2026-05-01' }, { ...repos[1], invited_at: '2026-06-01' }] };
 const options: Options = { view: 'collaborators', query: '', owner: '', visibility: '', sort: 'added' };
 
 test('latest push sorts independently of metadata updates, with missing dates last', () => {

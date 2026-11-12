@@ -1,8 +1,8 @@
 export type Repo = {
   id: number; full_name: string; description?: string | null; private: boolean; language?: string | null;
-  updated_at?: string | null; pushed_at?: string | null; archived?: boolean; collaborator?: boolean; invited_at?: string | null; open_prs?: number | null;
+  updated_at?: string | null; pushed_at?: string | null; archived?: boolean; collaborator?: boolean; invited_at?: string | null; open_prs?: number | null; local_path?: string | null; avatar_url?: string | null; icon?: string | null;
 };
-export type Overview = { login: string; repos: Repo[]; invitations: Repo[]; warning?: string | null };
+export type Overview = { login: string; clone_dir: string; repos: Repo[]; invitations: Repo[]; warning?: string | null };
 export type View = 'all' | 'collaborators' | 'shared' | 'invitations';
 export type Seen = Record<string, string | null>;
 export type Options = { view: View; query: string; owner: string; visibility: string; sort: string };

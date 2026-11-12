@@ -1,9 +1,18 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::process::Command;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use tauri::{AppHandle, Manager};
+
+#[derive(Deserialize, Clone, Default)]
+struct Owner {
+    avatar_url: Option<String>,
+}
 
 #[derive(Deserialize, Clone)]
 struct Raw {
+    #[serde(default)]
+    owner: Owner,
     id: u64,
     full_name: String,
     description: Option<String>,
@@ -27,6 +36,9 @@ struct Repo {
     collaborator: bool,
     invited_at: Option<String>,
     open_prs: Option<u64>,
+    local_path: Option<String>,
+    avatar_url: Option<String>,
+    icon: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -38,6 +50,7 @@ struct Invitation {
 #[derive(Serialize)]
 struct Overview {
     login: String,
+    clone_dir: String,
     repos: Vec<Repo>,
     invitations: Vec<Repo>,
     warning: Option<String>,
@@ -77,12 +90,182 @@ fn open_prs() -> Result<HashMap<String, u64>, String> {
 }
 
 fn repo(r: Raw, collaborator: bool, invited_at: Option<String>, open_prs: Option<u64>) -> Repo {
-    Repo { id: r.id, full_name: r.full_name, description: r.description, private: r.private, language: r.language, updated_at: r.updated_at, pushed_at: r.pushed_at, archived: r.archived, collaborator, invited_at, open_prs }
+    let avatar_url = r.owner.avatar_url.clone();
+    Repo { id: r.id, full_name: r.full_name, description: r.description, private: r.private, language: r.language, updated_at: r.updated_at, pushed_at: r.pushed_at, archived: r.archived, collaborator, invited_at, open_prs, local_path: None, avatar_url, icon: None }
+}
+
+#[derive(Serialize, Deserialize, Default)]
+struct Settings {
+    clone_dir: Option<PathBuf>,
+}
+
+fn settings_file(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app.path().app_config_dir().map_err(|e| e.to_string())?.join("settings.json"))
+}
+
+fn clone_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let saved = std::fs::read(settings_file(app)?).ok().and_then(|b| serde_json::from_slice::<Settings>(&b).ok()).and_then(|s| s.clone_dir);
+    match saved {
+        Some(dir) => Ok(dir),
+        None => Ok(app.path().home_dir().map_err(|e| e.to_string())?.join("Projects")),
+    }
 }
 
 #[tauri::command]
-async fn overview() -> Result<Overview, String> {
-    tauri::async_runtime::spawn_blocking(|| {
+fn set_clone_dir(app: AppHandle, dir: String) -> Result<(), String> {
+    let file = settings_file(&app)?;
+    std::fs::create_dir_all(file.parent().unwrap()).map_err(|e| e.to_string())?;
+    let json = serde_json::to_vec(&Settings { clone_dir: Some(dir.into()) }).map_err(|e| e.to_string())?;
+    std::fs::write(file, json).map_err(|e| e.to_string())
+}
+
+// Maps lowercase "owner/name" to the local folder, by reading each repository's git origin.
+// A folder with a .git stops the descent (nested repos are ignored); depth is capped to keep the scan fast.
+fn find_local(dir: &Path) -> HashMap<String, String> {
+    fn walk(dir: &Path, depth: u8, found: &mut HashMap<String, String>) {
+        for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            let path = entry.path();
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if !path.is_dir() || name.starts_with('.') || ["node_modules", "target"].contains(&&*name) {
+                continue;
+            }
+            match std::fs::read_to_string(path.join(".git/config")) {
+                Ok(config) => {
+                    for line in config.lines() {
+                        let Some((key, url)) = line.split_once('=') else { continue };
+                        if key.trim() != "url" { continue }
+                        if let Some((_, rest)) = url.trim().split_once("github.com") {
+                            let repo = rest.trim_start_matches([':', '/']).trim_end_matches('/').trim_end_matches(".git");
+                            found.entry(repo.to_lowercase()).or_insert_with(|| path.to_string_lossy().into_owned());
+                        }
+                    }
+                }
+                Err(_) if depth > 1 && !path.join(".git").exists() => walk(&path, depth - 1, found),
+                Err(_) => {}
+            }
+        }
+    }
+    let mut found = HashMap::new();
+    walk(dir, 4, &mut found);
+    found
+}
+
+// Looks for a logo in a cloned repository and returns it as a data URL.
+// shortcut: fixed list of common locations, upgrade to reading the manifest (package.json, Cargo.toml) if misses are common.
+fn find_icon(repo: &Path) -> Option<String> {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    const DIRS: &[&str] = &["", "assets", "public", "static", "docs", ".github", "src-tauri/icons", "app/src/main/res/mipmap-xxxhdpi"];
+    const FILES: &[&str] = &["icon.svg", "logo.svg", "favicon.svg", "icon.png", "logo.png", "128x128.png", "favicon.png", "ic_launcher.png", "favicon.ico"];
+    for dir in DIRS {
+        for file in FILES {
+            let path = repo.join(dir).join(file);
+            let Ok(meta) = std::fs::metadata(&path) else { continue };
+            if !meta.is_file() || meta.len() > 256 * 1024 { continue }
+            let mime = match path.extension()?.to_str()? {
+                "svg" => "image/svg+xml",
+                "png" => "image/png",
+                _ => "image/x-icon",
+            };
+            if let Ok(bytes) = std::fs::read(&path) {
+                return Some(format!("data:{mime};base64,{}", STANDARD.encode(bytes)));
+            }
+        }
+    }
+    None
+}
+
+#[tauri::command]
+fn repo_icon(path: String) -> Option<String> {
+    find_icon(Path::new(&path))
+}
+
+#[tauri::command]
+async fn clone_repo(app: AppHandle, full_name: String) -> Result<String, String> {
+    let valid = |part: &str| !part.is_empty() && part.chars().any(|c| c != '.') && part.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c));
+    let (owner, name) = full_name.split_once('/').ok_or("Invalid repository name.")?;
+    if !valid(owner) || !valid(name) {
+        return Err("Invalid repository name.".into());
+    }
+    let dir = clone_dir(&app)?;
+    let dest = dir.join(name);
+    if dest.exists() {
+        return Err(format!("A folder named “{name}” already exists in {}.", dir.display()));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let out = Command::new("gh").args(["repo", "clone", &full_name]).arg(&dest).output().map_err(|e| e.to_string())?;
+        if out.status.success() {
+            Ok(dest.to_string_lossy().into_owned())
+        } else {
+            Err(format!("Clone failed: {}", String::from_utf8_lossy(&out.stderr).trim()))
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// Launchers: (id, name, binary, leading args). The frontend only sends an id, never a command.
+const COMMANDS: &[(&str, &str, &str, &[&str])] = &[
+    ("code", "VS Code", "code", &[]),
+    ("cursor", "Cursor", "cursor", &[]),
+    ("zed", "Zed", "zed", &[]),
+    ("codium", "VSCodium", "codium", &[]),
+    ("idea", "IntelliJ IDEA", "idea", &[]),
+    ("webstorm", "WebStorm", "webstorm", &[]),
+    ("pycharm", "PyCharm", "pycharm", &[]),
+    ("rustrover", "RustRover", "rustrover", &[]),
+    ("subl", "Sublime Text", "subl", &[]),
+    ("codex", "Codex", "codex", &["app"]),
+];
+
+fn on_path(bin: &str) -> bool {
+    std::env::var_os("PATH").is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(bin).is_file()))
+}
+
+fn claude_installed() -> bool {
+    if cfg!(target_os = "linux") {
+        Command::new("xdg-mime").args(["query", "default", "x-scheme-handler/claude"]).output().is_ok_and(|o| !o.stdout.trim_ascii().is_empty())
+    } else if cfg!(target_os = "macos") {
+        Path::new("/Applications/Claude.app").exists()
+    } else {
+        true
+    }
+}
+
+#[derive(Serialize)]
+struct Tool {
+    id: &'static str,
+    name: &'static str,
+    // "url": opened as a deep link by the frontend; "command": launched by open_with.
+    kind: &'static str,
+}
+
+#[tauri::command]
+fn tools() -> Vec<Tool> {
+    let mut list = vec![];
+    if claude_installed() {
+        list.push(Tool { id: "claude", name: "Claude Desktop", kind: "url" });
+    }
+    list.extend(COMMANDS.iter().filter(|c| on_path(c.2)).map(|c| Tool { id: c.0, name: c.1, kind: "command" }));
+    list
+}
+
+#[tauri::command]
+fn open_with(id: String, path: String) -> Result<(), String> {
+    let (_, name, bin, lead) = COMMANDS.iter().find(|c| c.0 == id).ok_or("Unknown application.")?;
+    if !Path::new(&path).is_dir() {
+        return Err("This folder no longer exists.".into());
+    }
+    Command::new(bin).args(*lead).arg(&path).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(|e| format!("Could not start {name}: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn overview(app: AppHandle) -> Result<Overview, String> {
+    let dir = clone_dir(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let local = find_local(&dir);
         #[derive(Deserialize)]
         struct User { login: String }
         let user: User = gh("user", false)?;
@@ -97,7 +280,8 @@ async fn overview() -> Result<Overview, String> {
         };
         Ok(Overview {
             login: user.login,
-            repos: repos.into_iter().map(|r| { let c = collab_ids.contains(&r.id); let n = prs.get(&r.full_name.to_lowercase()).copied(); repo(r, c, None, n) }).collect(),
+            clone_dir: dir.to_string_lossy().into_owned(),
+            repos: repos.into_iter().map(|r| { let c = collab_ids.contains(&r.id); let n = prs.get(&r.full_name.to_lowercase()).copied(); let mut x = repo(r, c, None, n); x.local_path = local.get(&x.full_name.to_lowercase()).cloned(); x.icon = x.local_path.as_deref().and_then(|p| find_icon(Path::new(p))); x }).collect(),
             invitations: invitations.into_iter().map(|i| repo(i.repository, false, Some(i.created_at), None)).collect(),
             warning,
         })
@@ -110,7 +294,8 @@ async fn overview() -> Result<Overview, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![overview])
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![overview, repo_icon, set_clone_dir, clone_repo, tools, open_with])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
