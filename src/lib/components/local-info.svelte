@@ -2,6 +2,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { CircleCheckIcon, CircleAlertIcon, GitBranchIcon, RefreshCwIcon } from '@lucide/svelte';
+  import BranchSelect from '$lib/components/branch-select.svelte';
   import { Badge } from '$lib/components/ui/badge';
   import { Button } from '$lib/components/ui/button';
   import { runner } from '$lib/runner.svelte';
@@ -11,7 +12,10 @@
     branch: string; upstream: string | null; ahead: number; behind: number; changed: number; untracked: number; conflicted: number;
     last_commit: { hash: string; subject: string; author: string; date: string } | null; remote: string | null; branches: number; stashes: number;
   };
-  let { repo, defaultBranch }: { repo: Repo; defaultBranch?: string } = $props();
+  let { repo, defaultBranch, viewBranch, onview }: { repo: Repo; defaultBranch?: string; viewBranch?: string; onview: (branch: string) => void } = $props();
+  type Branches = { local: string[]; remote: string[] };
+  let branches = $state<Branches>({ local: [], remote: [] });
+  let switching = $state(false);
 
   let git = $state<Git | null>(null);
   let error = $state('');
@@ -30,10 +34,29 @@
     }
   }
 
+  async function loadBranches() {
+    if (repo.local_path) branches = await invoke<Branches>('git_branches', { path: repo.local_path }).catch(() => ({ local: [], remote: [] }));
+  }
+
+  async function switchTo(branch: string) {
+    switching = true;
+    try {
+      git = await invoke<Git>('git_switch', { path: repo.local_path, branch });
+      error = '';
+      await loadBranches();
+    } catch (e) {
+      // git's own message explains why (for example local changes that would be overwritten).
+      error = String(e);
+    } finally {
+      switching = false;
+    }
+  }
+
   $effect(() => {
     repo.local_path;
     git = null;
     call('git_status');
+    loadBranches();
   });
   // A command run from the README may have changed the repository (pull, install, build…).
   $effect(() => {
@@ -67,15 +90,21 @@
         </Button>
       </div>
       {#if error}
-        <p class="text-destructive" role="alert">{error}</p>
-      {:else if !git}
-        <p class="text-muted-foreground" role="status">Reading…</p>
+        <p class="text-destructive mb-3 text-xs break-words whitespace-pre-line" role="alert">{error}</p>
+      {/if}
+      {#if !git}
+        {#if !error}<p class="text-muted-foreground" role="status">Reading…</p>{/if}
       {:else}
         <dl class="grid gap-3">
           <div>
-            <dt class="text-muted-foreground text-xs">Branch</dt>
-            <dd class="flex flex-wrap items-center gap-2"><GitBranchIcon class="size-4" /><span class="font-mono">{git.branch}</span>
-              {#if defaultBranch && git.branch !== defaultBranch}<Badge variant="outline" title="The files and README shown here come from {defaultBranch}">not {defaultBranch}</Badge>{/if}
+            <dt class="text-muted-foreground mb-1 text-xs">Branch</dt>
+            <dd class="flex flex-col items-start gap-2">
+              <BranchSelect label="Switch local branch" value={git.branch} disabled={switching || busy}
+                groups={[{ label: 'Local', items: branches.local }, { label: 'On origin only', items: branches.remote }]} onselect={switchTo} />
+              {#if viewBranch && git.branch !== viewBranch}
+                <p class="text-muted-foreground text-xs">Files and README show <code>{viewBranch}</code> from GitHub.
+                  <button class="underline" onclick={() => onview(git!.branch)}>Show {git.branch}</button></p>
+              {/if}
             </dd>
           </div>
           <div>

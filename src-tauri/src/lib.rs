@@ -203,6 +203,19 @@ fn encode_path(path: &str) -> String {
     path.split('/').map(|seg| seg.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect::<String>()).collect::<Vec<_>>().join("/")
 }
 
+#[tauri::command]
+async fn repo_branches(full_name: String) -> Result<Vec<String>, String> {
+    split_repo(&full_name)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        #[derive(Deserialize)]
+        struct B { name: String }
+        let list: Vec<B> = gh(&format!("repos/{full_name}/branches?per_page=100"), true)?;
+        Ok(list.into_iter().map(|b| b.name).collect())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // Local actions only run inside a repository under the clone folder.
 fn repo_dir(app: &AppHandle, path: &str) -> Result<PathBuf, String> {
     let root = clone_dir(app)?.canonicalize().map_err(|_| "The clone folder does not exist.".to_string())?;
@@ -283,6 +296,44 @@ async fn git_fetch(app: AppHandle, path: String) -> Result<GitInfo, String> {
     let dir = repo_dir(&app, &path)?;
     tauri::async_runtime::spawn_blocking(move || {
         git(&dir, &["fetch", "--prune"]).ok_or("Fetch failed. Check your connection and GitHub access.")?;
+        git_info(&dir)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(Serialize)]
+struct Branches {
+    local: Vec<String>,
+    // Branches that exist only on origin: switching to one creates a local tracking branch.
+    remote: Vec<String>,
+}
+
+#[tauri::command]
+async fn git_branches(app: AppHandle, path: String) -> Result<Branches, String> {
+    let dir = repo_dir(&app, &path)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let list = |refs: &str| git(&dir, &["for-each-ref", "--format=%(refname:short)", refs]).unwrap_or_default().lines().map(String::from).collect::<Vec<_>>();
+        let local = list("refs/heads");
+        let remote = list("refs/remotes/origin").into_iter().filter_map(|b| b.strip_prefix("origin/").map(String::from)).filter(|b| b != "HEAD" && !local.contains(b)).collect();
+        Ok(Branches { local, remote })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// Plain `git switch`: git itself refuses when local changes would be overwritten.
+#[tauri::command]
+async fn git_switch(app: AppHandle, path: String, branch: String) -> Result<GitInfo, String> {
+    let dir = repo_dir(&app, &path)?;
+    if branch.is_empty() || branch.starts_with('-') || branch.contains("..") || branch.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return Err("Invalid branch name.".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let out = Command::new("git").arg("-C").arg(&dir).args(["switch", &branch]).env("GIT_TERMINAL_PROMPT", "0").output().map_err(|e| e.to_string())?;
+        if !out.status.success() {
+            return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+        }
         git_info(&dir)
     })
     .await
@@ -499,7 +550,7 @@ pub fn run() {
         .manage(Running::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![overview, git_status, git_fetch, repo_file, run_command, stop_command, repo_icon, set_clone_dir, clone_repo, tools, open_with])
+        .invoke_handler(tauri::generate_handler![overview, repo_branches, git_branches, git_switch, git_status, git_fetch, repo_file, run_command, stop_command, repo_icon, set_clone_dir, clone_repo, tools, open_with])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
