@@ -190,6 +190,46 @@ fn split_repo(full_name: &str) -> Result<(&str, &str), String> {
     }
 }
 
+#[derive(Serialize)]
+struct Detail {
+    default_branch: String,
+    readme: Option<String>,
+    readme_path: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Entry {
+    name: String,
+    path: String,
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(default)]
+    size: u64,
+}
+
+#[tauri::command]
+async fn repo_detail(full_name: String, branch: Option<String>) -> Result<Detail, String> {
+    split_repo(&full_name)?;
+    let query = ref_query(&branch)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        use base64::{Engine, engine::general_purpose::STANDARD};
+        #[derive(Deserialize)]
+        struct Info { default_branch: String }
+        #[derive(Deserialize)]
+        struct Readme { content: String, path: String }
+        let info: Info = gh(&format!("repos/{full_name}"), false)?;
+        // A repository without README is normal: ignore that error.
+        let readme: Option<Readme> = gh(&format!("repos/{full_name}/readme{query}"), false).ok();
+        let text = readme.as_ref().and_then(|r| {
+            let compact: String = r.content.chars().filter(|c| !c.is_whitespace()).collect();
+            STANDARD.decode(compact).ok().map(|b| String::from_utf8_lossy(&b).into_owned())
+        });
+        Ok(Detail { default_branch: info.default_branch, readme: text, readme_path: readme.map(|r| r.path) })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // Builds the `?ref=` query for a branch name, rejecting anything that could alter the request.
 fn ref_query(branch: &Option<String>) -> Result<String, String> {
     match branch.as_deref() {
@@ -211,6 +251,23 @@ async fn repo_branches(full_name: String) -> Result<Vec<String>, String> {
         struct B { name: String }
         let list: Vec<B> = gh(&format!("repos/{full_name}/branches?per_page=100"), true)?;
         Ok(list.into_iter().map(|b| b.name).collect())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn repo_files(full_name: String, path: String, branch: Option<String>) -> Result<Vec<Entry>, String> {
+    split_repo(&full_name)?;
+    let query = ref_query(&branch)?;
+    if path.split('/').any(|seg| seg == "..") {
+        return Err("Invalid path.".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut entries: Vec<Entry> = gh(&format!("repos/{full_name}/contents/{}{query}", encode_path(&path)), false)?;
+        // Folders first, then alphabetical.
+        entries.sort_by(|a, b| (a.kind != "dir").cmp(&(b.kind != "dir")).then(a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+        Ok(entries)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -550,7 +607,7 @@ pub fn run() {
         .manage(Running::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![overview, repo_branches, git_branches, git_switch, git_status, git_fetch, repo_file, run_command, stop_command, repo_icon, set_clone_dir, clone_repo, tools, open_with])
+        .invoke_handler(tauri::generate_handler![overview, repo_branches, git_branches, git_switch, git_status, git_fetch, repo_file, run_command, stop_command, repo_detail, repo_files, repo_icon, set_clone_dir, clone_repo, tools, open_with])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
