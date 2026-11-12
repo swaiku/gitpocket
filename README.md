@@ -198,6 +198,18 @@ xhost +local:
 
 Host applications (IDEs, Claude Desktop) are not visible from inside the container, so test the **Open** menu by running the app on the host. You also need to run `gh auth login` again inside the container.
 
+## Releases
+
+Work lands on `develop` and is released from `main`, like the other projects of this account:
+
+1. **CI** runs on every push and pull request: type check, tests, frontend build and `cargo check`. Pushes to `develop` (and pull requests to `main`) also build a debug `.deb`.
+2. Run the **Prepare release** workflow: it bumps the version (`package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`), updates `CHANGELOG.md` from the gitmoji commits and opens the `develop` → `main` pull request.
+3. Merging that pull request runs **Release**: it builds the installers for Linux, macOS (Apple silicon and Intel) and Windows, then publishes the GitHub release and its tag.
+
+The installers are not code-signed, so macOS and Windows warn on first launch. GitHub CLI must be installed and signed in on the machine that runs GitPocket.
+
+Dependabot opens weekly update pull requests against `develop` and merges minor and patch updates once CI is green.
+
 ## Contributing
 
 Issues and pull requests are welcome. Please run `bun run check` and `bun test src/lib` before opening a pull request, and keep the app read-only toward GitHub.
