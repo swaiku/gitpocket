@@ -5,7 +5,7 @@ export type Repo = {
 export type Overview = { login: string; clone_dir: string; repos: Repo[]; invitations: Repo[]; warning?: string | null };
 export type View = 'all' | 'collaborators' | 'shared' | 'invitations';
 export type Seen = Record<string, string | null>;
-export type Options = { view: View; query: string; owner: string; visibility: string; sort: string };
+export type Options = { view: View; query: string; owners: string[]; visibility: string; sort: string };
 
 export function trackAdditions(previous: Seen | null, repos: Pick<Repo, 'id'>[], now: string): Seen {
   const seen: Seen = { ...previous };
@@ -15,13 +15,13 @@ export function trackAdditions(previous: Seen | null, repos: Pick<Repo, 'id'>[],
   return seen;
 }
 
-export function filterRepos(data: Overview, { view, query, owner, visibility, sort }: Options, seen: Seen): Repo[] {
+export function filterRepos(data: Overview, { view, query, owners, visibility, sort }: Options, seen: Seen): Repo[] {
   const source = view === 'invitations' ? data.invitations : data.repos;
   return source.filter(repo => {
     const repoOwner = repo.full_name.split('/')[0];
     return (view !== 'collaborators' || repo.collaborator) &&
       (view !== 'shared' || repoOwner.toLowerCase() !== data.login.toLowerCase()) &&
-      (!owner || repoOwner === owner) &&
+      (!owners.length || owners.includes(repoOwner)) &&
       (!visibility || (visibility === 'private') === repo.private) &&
       `${repo.full_name} ${repo.description || ''} ${repo.language || ''}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
   }).sort((a, b) => {

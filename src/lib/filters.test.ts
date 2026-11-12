@@ -8,7 +8,7 @@ const repos = [
   { id: 3, full_name: 'me/own', collaborator: false, private: false, updated_at: '2026-03-01' },
 ];
 const data = { login: 'me', clone_dir: '', repos, invitations: [{ ...repos[0], invited_at: '2026-05-01' }, { ...repos[1], invited_at: '2026-06-01' }] };
-const options: Options = { view: 'collaborators', query: '', owner: '', visibility: '', sort: 'added' };
+const options: Options = { view: 'collaborators', query: '', owners: [], visibility: '', sort: 'added' };
 
 test('latest push sorts independently of metadata updates, with missing dates last', () => {
   const pushData = { ...data, repos: [
@@ -25,8 +25,8 @@ test('direct collaborators excludes organization-only access and owned repositor
   assert.deepEqual(filterRepos(data, options, {}).map(r => r.id), [1]);
   assert.deepEqual(filterRepos(data, { ...options, view: 'shared', sort: 'updated' }, {}).map(r => r.id), [2, 1]);
   assert.deepEqual(filterRepos(data, { ...options, view: 'all', visibility: 'public' }, {}).map(r => r.id), [3]);
-  assert.equal(filterRepos(data, { ...options, query: 'javascript', owner: 'example-team', visibility: 'private' }, {}).length, 1);
-  assert.equal(filterRepos(data, { ...options, owner: 'org' }, {}).length, 0);
+  assert.equal(filterRepos(data, { ...options, query: 'javascript', owners: ['example-team'], visibility: 'private' }, {}).length, 1);
+  assert.equal(filterRepos(data, { ...options, owners: ['org'] }, {}).length, 0);
 });
 
 test('initial baseline has no fabricated date; subsequent additions keep their original detection date', () => {

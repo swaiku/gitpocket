@@ -9,6 +9,7 @@
   import { Badge } from '$lib/components/ui/badge';
   import * as Tabs from '$lib/components/ui/tabs';
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+  import MultiSelect from '$lib/components/multi-select.svelte';
   import * as Select from '$lib/components/ui/select';
   import { filterRepos, trackAdditions, type Overview, type Repo, type Seen, type View } from '$lib/filters';
 
@@ -19,7 +20,7 @@
   let seen = $state<Seen>({});
   let view = $state<View>('all');
   let query = $state('');
-  let owner = $state('');
+  let selectedOwners = $state<string[]>([]);
   let visibility = $state('');
   let sort = $state('pushed');
   let loading = $state(false);
@@ -41,7 +42,7 @@
   let actionError = $state('');
   let search: HTMLInputElement | null = $state(null);
 
-  const repos = $derived(data ? filterRepos(data, { view, query, owner, visibility, sort }, seen) : []);
+  const repos = $derived(data ? filterRepos(data, { view, query, owners: selectedOwners, visibility, sort }, seen) : []);
   const owners = $derived(data ? [...new Set([...data.repos, ...data.invitations].map(r => r.full_name.split('/')[0]))].sort((a, b) => a.localeCompare(b)) : []);
   const counts = $derived<Record<View, number>>({
     all: data?.repos.length ?? 0,
@@ -50,7 +51,7 @@
     invitations: data?.invitations.length ?? 0,
   });
   const tabs: [View, string][] = [['all', 'All'], ['collaborators', 'Collaborations'], ['shared', 'Shared'], ['invitations', 'Invitations']];
-  const filtered = $derived(!!query || !!owner || !!visibility);
+  const filtered = $derived(!!query || !!selectedOwners.length || !!visibility);
   const notices = $derived([data?.warning, storageWarning, actionError].filter(Boolean));
 
   const units: [Intl.RelativeTimeFormatUnit, number][] = [['year', 31536000], ['month', 2592000], ['day', 86400], ['hour', 3600], ['minute', 60]];
@@ -62,7 +63,8 @@
   }
 
   function reset() {
-    query = owner = visibility = '';
+    query = visibility = '';
+    selectedOwners = [];
   }
 
   async function load() {
@@ -82,7 +84,7 @@
         seen = {};
         storageWarning = 'Tracking of new additions is unavailable: local storage is not accessible.';
       }
-      if (!owners.includes(owner)) owner = '';
+      selectedOwners = selectedOwners.filter(o => owners.includes(o));
     } catch (e) {
       error = String(e);
     } finally {
@@ -160,13 +162,7 @@
     </Tabs.Root>
 
     <div class="flex flex-wrap items-center gap-2">
-      <Select.Root type="single" bind:value={owner}>
-        <Select.Trigger class="w-44" aria-label="Owner">{owner || 'All owners'}</Select.Trigger>
-        <Select.Content>
-          <Select.Item value="">All owners</Select.Item>
-          {#each owners as o}<Select.Item value={o}>{o}</Select.Item>{/each}
-        </Select.Content>
-      </Select.Root>
+      <MultiSelect options={owners} bind:selected={selectedOwners} all="All owners" noun="owners" label="Owners" />
       <Select.Root type="single" bind:value={visibility}>
         <Select.Trigger class="w-44" aria-label="Visibility">{visibilities[visibility as keyof typeof visibilities]}</Select.Trigger>
         <Select.Content>
