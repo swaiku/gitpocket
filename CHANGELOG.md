@@ -1,3 +1,43 @@
+## v0.1.1 (13-11-2026)
+
+### ♻️ Refactoring
+
+- Add the GitPocket logo, app icons and README header
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com> ([a8ea5d2](https://github.com/swaiku/gitpocket/commit/a8ea5d2c5b595fa8a11ac86d2bb9b3ff1a2b9295))
+- Regenerate the app icons from the cutout logo
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com> ([6b4af49](https://github.com/swaiku/gitpocket/commit/6b4af4991354004eaabc65d2e96ac1246e701873))
+
+### 🐛 Bug Fixes
+
+- Pass the logo to the README header with the logo parameter
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com> ([af5186d](https://github.com/swaiku/gitpocket/commit/af5186db59198d0fbb3b705549ed63f0143bd1f9))
+- Make the branch a real cutout in the white logo
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com> ([093c09c](https://github.com/swaiku/gitpocket/commit/093c09c12013740c76eb9fceda7f44f4ca9efd22))
+- Make the branch a real cutout in the black logo
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com> ([91b675a](https://github.com/swaiku/gitpocket/commit/91b675af074846df8348a60a86269a926634c996))
+- Add the Homebrew directories to PATH on macOS
+
+An app launched from the Finder gets a minimal PATH, so gh and git were not found.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com> ([f9f5e4e](https://github.com/swaiku/gitpocket/commit/f9f5e4ebad64b91dc8a171458fe355dd0bb673cc))
+
+### 📝 Documentation
+
+- Add release and CI badges to the README
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com> ([00b8364](https://github.com/swaiku/gitpocket/commit/00b83641f47c69224b6dde003a2026bc723571f2))
+
+### 🔀 Other
+
+- Remove the old README banners
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com> ([67462f4](https://github.com/swaiku/gitpocket/commit/67462f4ed88bb3a81f9cd5f15d2b53ffa682aad3))
+
 ## v0.1.0 (12-11-2026)
 
 ### ♻️ Refactoring
