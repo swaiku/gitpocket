@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/header/gradient.svg?title=GitPocket&amp;subtitle=Every+GitHub+repo+you+own%2C+share+or+were+invited+to%2C+in+one+place&amp;theme=rose&amp;mode=dark&amp;image=https://raw.githubusercontent.com/swaiku/gitpocket/main/art/logo-white.svg">
-    <img alt="GitPocket — every GitHub repo you own, share or were invited to, in one place" src="https://shieldcn.dev/header/gradient.svg?title=GitPocket&amp;subtitle=Every+GitHub+repo+you+own%2C+share+or+were+invited+to%2C+in+one+place&amp;theme=rose&amp;mode=light&amp;image=https://raw.githubusercontent.com/swaiku/gitpocket/main/art/logo.svg" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/header/gradient.svg?title=GitPocket&amp;subtitle=Every+GitHub+repo+you+own%2C+share+or+were+invited+to%2C+in+one+place&amp;theme=rose&amp;mode=dark&amp;logo=https://raw.githubusercontent.com/swaiku/gitpocket/main/art/logo-white.svg">
+    <img alt="GitPocket — every GitHub repo you own, share or were invited to, in one place" src="https://shieldcn.dev/header/gradient.svg?title=GitPocket&amp;subtitle=Every+GitHub+repo+you+own%2C+share+or+were+invited+to%2C+in+one+place&amp;theme=rose&amp;mode=light&amp;logo=https://raw.githubusercontent.com/swaiku/gitpocket/main/art/logo.svg" />
   </picture>
 </p>
 
