@@ -603,6 +603,17 @@ async fn overview(app: AppHandle) -> Result<Overview, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // shortcut: fixed Homebrew dirs, not the login shell's PATH; upgrade if gh lives elsewhere (nix, MacPorts).
+    // A Finder-launched app gets a minimal PATH that lacks Homebrew, so `gh` and `git` are not found.
+    #[cfg(target_os = "macos")]
+    {
+        let old = std::env::var_os("PATH").unwrap_or_default();
+        let dirs = ["/opt/homebrew/bin", "/usr/local/bin"].map(std::path::PathBuf::from).into_iter().chain(std::env::split_paths(&old));
+        if let Ok(path) = std::env::join_paths(dirs) {
+            // SAFETY: runs first thing in main, before any thread is spawned.
+            unsafe { std::env::set_var("PATH", path) };
+        }
+    }
     tauri::Builder::default()
         .manage(Running::default())
         .plugin(tauri_plugin_opener::init())
