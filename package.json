@@ -1,6 +1,6 @@
 {
   "name": "gitpocket",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Your GitHub repositories, in one place.",
   "private": true,
   "type": "module",
